@@ -1,6 +1,8 @@
 import os
 import json
 import uuid
+import re
+import math
 from datetime import datetime, timezone
 
 from flask import Flask, request, jsonify
@@ -85,6 +87,83 @@ Text to analyze:
         return 0.5
 
 
+# ─── Signal 2: Stylometric Heuristics ────────────────────────────────────────
+
+def stylometric_signal(text):
+    """
+    Measures three statistical properties that differ between AI and human writing.
+    Returns a float between 0.0 (human-like) and 1.0 (AI-like).
+    """
+    sentences = [s.strip() for s in re.split(r'[.!?]+', text) if s.strip()]
+    words = re.findall(r'\b\w+\b', text.lower())
+    total_words = len(words)
+
+    if total_words < 10 or len(sentences) < 2:
+        return 0.5  # not enough data to score reliably
+
+    # Metric 1: sentence length variance
+    # Low variance = uniform = more AI-like
+    lengths = [len(re.findall(r'\b\w+\b', s)) for s in sentences]
+    mean_len = sum(lengths) / len(lengths)
+    variance = sum((l - mean_len) ** 2 for l in lengths) / len(lengths)
+    std_dev = math.sqrt(variance)
+    # Normalize: std_dev of 0 is maximally AI-like, 10+ is human-like
+    variance_score = 1.0 - min(std_dev / 10.0, 1.0)
+
+    # Metric 2: type-token ratio (vocabulary diversity)
+    # Low TTR = repetitive vocabulary = more AI-like
+    unique_words = len(set(words))
+    ttr = unique_words / total_words
+    # Normalize: TTR of 1.0 is maximally human, 0.5 or below is AI-like
+    ttr_score = 1.0 - min((ttr - 0.5) / 0.5, 1.0)
+    ttr_score = max(0.0, ttr_score)
+
+    # Metric 3: punctuation density
+    # AI text uses punctuation predictably; very low density is AI-like
+    punct_count = len(re.findall(r'[,;:\(\)\"\'\-]', text))
+    punct_per_100 = (punct_count / total_words) * 100
+    # Normalize: below 3 per 100 words is AI-like, above 8 is human-like
+    punct_score = 1.0 - min(max(punct_per_100 - 3.0, 0.0) / 5.0, 1.0)
+
+    stylo_score = (variance_score + ttr_score + punct_score) / 3.0
+    return round(max(0.0, min(1.0, stylo_score)), 4)
+
+
+# ─── Confidence Scorer ────────────────────────────────────────────────────────
+
+def compute_confidence(llm_score, stylo_score):
+    """
+    Weighted average: LLM gets 65%, stylometrics get 35%.
+    Returns a float between 0.0 and 1.0.
+    """
+    return round((llm_score * 0.65) + (stylo_score * 0.35), 4)
+
+
+# ─── Label Generator ──────────────────────────────────────────────────────────
+
+def generate_label(confidence):
+    """
+    Maps confidence score to one of three plain-language transparency labels.
+    """
+    if confidence >= 0.65:
+        return (
+            "Our system found strong indicators that this content was likely generated "
+            "by an AI writing tool. This does not mean your work has been removed. "
+            "If you wrote this yourself, you can submit an appeal and a reviewer will take a closer look."
+        )
+    elif confidence >= 0.36:
+        return (
+            "Our system was not able to confidently determine whether this content was "
+            "written by a person or an AI tool. No action has been taken. If you believe "
+            "this result is wrong, you can submit an appeal with context about your writing process."
+        )
+    else:
+        return (
+            "Our system found strong indicators that this content was written by a person. "
+            "Thank you for sharing your work."
+        )
+
+
 # ─── Submission Endpoint ──────────────────────────────────────────────────────
 
 @app.route("/submit", methods=["POST"])
@@ -103,22 +182,20 @@ def submit():
     content_id = str(uuid.uuid4())
     timestamp = datetime.now(timezone.utc).isoformat()
 
-    # Signal 1 only for now (Signal 2 added in M4)
     llm_score = llm_signal(text)
-
-    # Placeholder confidence and label until M4 wires in Signal 2
-    confidence = llm_score
+    stylo_score = stylometric_signal(text)
+    confidence = compute_confidence(llm_score, stylo_score)
     attribution = "likely_ai" if confidence >= 0.65 else ("uncertain" if confidence >= 0.36 else "likely_human")
-    label = "[placeholder label — wired up in M5]"
+    label = generate_label(confidence)
 
     entry = {
         "content_id": content_id,
         "creator_id": creator_id,
         "timestamp": timestamp,
         "attribution": attribution,
-        "confidence": round(confidence, 4),
+        "confidence": confidence,
         "llm_score": round(llm_score, 4),
-        "stylo_score": None,
+        "stylo_score": stylo_score,
         "label": label,
         "status": "classified",
         "appeal_reasoning": None,
@@ -129,8 +206,9 @@ def submit():
     return jsonify({
         "content_id": content_id,
         "attribution": attribution,
-        "confidence": round(confidence, 4),
+        "confidence": confidence,
         "llm_score": round(llm_score, 4),
+        "stylo_score": stylo_score,
         "label": label,
         "status": "classified",
     }), 200
