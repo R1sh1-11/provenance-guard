@@ -1,0 +1,41 @@
+[
+  {
+    "content_id": "2ae5878e-6356-4335-967b-17946b11dbf3",
+    "creator_id": "test-user-1",
+    "timestamp": "2026-06-29T03:32:19.222018+00:00",
+    "attribution": "likely_ai",
+    "confidence": 0.8,
+    "llm_score": 0.8,
+    "stylo_score": null,
+    "label": "[placeholder label \u2014 wired up in M5]",
+    "status": "classified",
+    "appeal_reasoning": null,
+    "appeal_timestamp": null
+  },
+  {
+    "content_id": "04dc6008-3516-4e96-bf58-387669574ead",
+    "creator_id": "test-user-2",
+    "timestamp": "2026-06-29T03:32:27.732783+00:00",
+    "attribution": "likely_human",
+    "confidence": 0.2,
+    "llm_score": 0.2,
+    "stylo_score": null,
+    "label": "[placeholder label \u2014 wired up in M5]",
+    "status": "classified",
+    "appeal_reasoning": null,
+    "appeal_timestamp": null
+  },
+  {
+    "content_id": "be4a3402-b860-45df-b9d6-8c3d7203cfed",
+    "creator_id": "test-user-2",
+    "timestamp": "2026-06-29T03:32:50.691230+00:00",
+    "attribution": "likely_human",
+    "confidence": 0.2,
+    "llm_score": 0.2,
+    "stylo_score": null,
+    "label": "[placeholder label \u2014 wired up in M5]",
+    "status": "classified",
+    "appeal_reasoning": null,
+    "appeal_timestamp": null
+  }
+]
